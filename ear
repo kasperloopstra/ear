@@ -12,7 +12,7 @@ import media
 import script
 # }}}
 
-config = fhs.init({})
+config = fhs.init({"webUI":True })
 
 # Classes. {{{
 class Track:
@@ -321,8 +321,8 @@ data = {
 	'scalemarks': lambda m: setattr(g, 'scalemarks', m),
 	}
 data['media'].send_pixbuf = lambda pixbuf: setattr(g, 'image', pixbuf)
-g = gui.Gui(widgets = {'Markers': markers.Markers, 'Fileselector': fileselector.Fileselector}, data = data,
-		events = {
+kwargs = {'widgets' : {'Markers': markers.Markers, 'Fileselector': fileselector.Fileselector}, 'data' : data,
+		'events' : {
 			'help_about': lambda x: setattr(g, 'show_about', True),
 			'file_new': file_new,
 			'save': lambda x: save(data['track'].dbname),
@@ -380,7 +380,7 @@ g = gui.Gui(widgets = {'Markers': markers.Markers, 'Fileselector': fileselector.
 			'run_script12': lambda x: run_script(12),
 			'scripts_changed': scripts_changed,
 			},
-		inputs = (
+		'inputs' : (
 			'before_active',
 			'before',
 			'delay_active',
@@ -405,7 +405,7 @@ g = gui.Gui(widgets = {'Markers': markers.Markers, 'Fileselector': fileselector.
 			'script11',
 			'script12',
 			),
-		outputs = (
+		'outputs' : (
 			'title',
 			'status',
 			'show_about',
@@ -424,8 +424,58 @@ g = gui.Gui(widgets = {'Markers': markers.Markers, 'Fileselector': fileselector.
 			'offset_range',
 			'update_files',
 			)
-		)
+		}
+g = gui.Gui(**kwargs)
 # }}}
+
+
+if config['webUI']:
+	import zmq
+	import simplejson.scanner
+	import subprocess
+	zmqcontext=zmq.Context()
+	zmq_socket=zmqcontext.socket(zmq.REP)
+	zmq_socket.bind("tcp://*:5555")
+	zmq_fd=zmq_socket.getsockopt(zmq.FD)
+	def zmq_callback(fd,condition,zmq_socket):
+		while zmq_socket.getsockopt(zmq.EVENTS) & zmq.POLLIN:
+			try:
+				msg = zmq_socket.recv_json()
+			except simplejson.scanner.JSONDecodeError:
+				zmq_socket.send_string("something recieved, please send json")
+				continue
+			if type(msg)==str:
+				if msg =="dir":
+					events=list(kwargs['events'].keys())
+					events.sort()
+					events.append("play") #Special temp usecase
+					zmq_socket.send_json(events)
+				elif msg.startswith('event:'):
+					event=msg[len('event:'):]
+					print ("Event:{}".format(event))
+					if event in kwargs['events'].keys():
+						print("Calling an event: {}".format(event))
+						try:
+							ret=kwargs['events'][event]("foo")
+						except TypeError:
+							ret=kwargs['events'][event]()
+						print(ret)
+						zmq_socket.send_json(ret)	
+					elif event == "play":
+						g.playing=True
+						zmq_socket.send_json(g.playing)	
+					else:
+						zmq_socket.send_json("No such event")
+						print("No such event")
+					
+		return True
+
+	from gi.repository import GObject
+	GObject.io_add_watch(zmq_fd,GObject.IO_IN, zmq_callback, zmq_socket)
+	child=subprocess.Popen(["python", "muntjac_webui.py"])
+
 
 set_pos(0)
 g()
+if config['webUI']:
+	subprocess.Popen.terminate(child)
