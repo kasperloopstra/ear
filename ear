@@ -325,11 +325,7 @@ kwargs = {'widgets' : {'Markers': markers.Markers, 'Fileselector': fileselector.
 		'events' : {
 			'help_about': lambda x: setattr(g, 'show_about', True),
 			'file_new': file_new,
-<<<<<<< HEAD
 			'save': lambda x: save(data['track'].dbname),
-=======
-			'save': lambda _: save(data['track'].dbname),
->>>>>>> eaa7954bccebcd83ec048c09503bc64f5b95b405
 			'file_quit': lambda x: g(False),
 			'new_file': new_file,
 			'pause': lambda: data['media'].pause(not g.playing),
